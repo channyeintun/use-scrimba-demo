@@ -5,14 +5,47 @@ import { useScrimba, type Recording } from 'use-scrimba';
 
 const BasicExample: React.FC = () => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const scrimbaHook = useScrimba({
     editorRef,
-    onRecordingStart: () => console.log('📹 Recording started'),
+    audioRef, // Enable native audio synchronization
+    onRecordingStart: async () => {
+      console.log('📹 Recording started with perfect audio sync');
+      // Start audio recording when editor recording starts
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        
+        // Reset audio chunks
+        audioChunksRef.current = [];
+        
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            audioChunksRef.current.push(e.data);
+          }
+        };
+        
+        mediaRecorder.onstop = () => {
+          // Stop all tracks to release microphone
+          stream.getTracks().forEach(track => track.stop());
+        };
+        
+        mediaRecorder.start();
+        setIsRecordingAudio(true);
+        
+      } catch (error) {
+        console.error('Failed to start audio recording:', error);
+      }
+    },
     onRecordingStop: (recording: Recording) => console.log('⏹️ Recording stopped', recording),
-    onPlaybackStart: () => console.log('▶️ Playback started'),
-    onPlaybackPause: () => console.log('⏸️ Playback paused'),
+    onPlaybackStart: () => console.log('▶️ Perfect synchronized playback started'),
+    onPlaybackPause: () => console.log('⏸️ Synchronized playback paused'),
     onError: (error: Error) => console.error('🚨 Scrimba error:', error),
     pauseOnUserInteraction: true,
   });
@@ -67,6 +100,21 @@ const BasicExample: React.FC = () => {
     seekTo(targetTime);
   };
 
+  // Custom stop recording with audio
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current && isRecordingAudio) {
+      mediaRecorderRef.current.onstop = () => {
+        // Create audio blob and attach to recording
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stopRecording({ audioBlob });
+      };
+      mediaRecorderRef.current.stop();
+      setIsRecordingAudio(false);
+    } else {
+      stopRecording();
+    }
+  };
+
   const handlePlayPause = () => {
     if (isPlaying) {
       pause();
@@ -112,7 +160,7 @@ const BasicExample: React.FC = () => {
           <div className="flex items-center gap-3">
             {/* Record Button */}
             <button
-              onClick={isRecording ? () => stopRecording() : startRecording}
+              onClick={isRecording ? handleStopRecording : startRecording}
               disabled={isPlaying}
               className={`w-6 h-6 rounded-full flex items-center justify-center ${
                 isPlaying 
@@ -217,6 +265,9 @@ const BasicExample: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Hidden Audio Element - Managed by useScrimba hook for perfect sync */}
+      <audio ref={audioRef} style={{ display: 'none' }} />
 
     </div>
   );
