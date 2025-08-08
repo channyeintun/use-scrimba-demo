@@ -1,10 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import type * as monaco from 'monaco-editor';
 import { useScrimba, type Recording } from 'use-scrimba';
 
 const BasicExample: React.FC = () => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const [recordingTime, setRecordingTime] = useState(0);
 
   const scrimbaHook = useScrimba({
     editorRef,
@@ -12,6 +13,8 @@ const BasicExample: React.FC = () => {
     onRecordingStop: (recording: Recording) => console.log('⏹️ Recording stopped', recording),
     onPlaybackStart: () => console.log('▶️ Playback started'),
     onPlaybackPause: () => console.log('⏸️ Playback paused'),
+    onError: (error: Error) => console.error('🚨 Scrimba error:', error),
+    pauseOnUserInteraction: true,
   });
 
   const {
@@ -20,6 +23,8 @@ const BasicExample: React.FC = () => {
     currentTime,
     recordings,
     currentRecording,
+    recordingStartTime,
+    hasEnded,
     startRecording,
     stopRecording,
     play,
@@ -32,6 +37,22 @@ const BasicExample: React.FC = () => {
     handleEditorChange,
   } = scrimbaHook;
 
+  // Continuous timer for recording
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (isRecording && recordingStartTime) {
+      interval = setInterval(() => {
+        setRecordingTime(Date.now() - recordingStartTime);
+      }, 100); // Update every 100ms for smooth timer
+    } else {
+      setRecordingTime(0);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRecording, recordingStartTime]);
+
   const formatTime = (time: number) => {
     const seconds = Math.floor(time / 1000);
     const minutes = Math.floor(seconds / 60);
@@ -40,13 +61,21 @@ const BasicExample: React.FC = () => {
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!currentRecording) return;
-
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = clickX / rect.width;
     const targetTime = percentage * currentRecording.duration;
-
     seekTo(targetTime);
+  };
+
+  const handlePlayPause = () => {
+    if (isPlaying) {
+      pause();
+    } else {
+      // With the fixed hasEnded API, just call play()
+      // It will automatically restart from beginning if ended
+      play();
+    }
   };
 
   return (
@@ -55,7 +84,6 @@ const BasicExample: React.FC = () => {
 
       <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
         <Editor
-          value=''
           height="400px"
           language="javascript"
           theme="vs-dark"
@@ -81,129 +109,118 @@ const BasicExample: React.FC = () => {
           }}
         />
 
-        <div className="bg-gray-700 p-4 border-t border-gray-600">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={play}
-                disabled={!currentRecording || isPlaying}
-                className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-                title="Play"
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </button>
-              <button
-                onClick={pause}
-                disabled={!isPlaying}
-                className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-                title="Pause"
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                </svg>
-              </button>
-              <button
-                onClick={stop}
-                disabled={!currentRecording}
-                className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-                title="Stop"
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 6h12v12H6z" />
-                </svg>
-              </button>
-            </div>
+        <div className="bg-gray-800 px-4 py-3 border-t border-gray-600">
+          <div className="flex items-center gap-3">
+            {/* Record Button */}
+            <button
+              onClick={isRecording ? () => stopRecording() : startRecording}
+              className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                isRecording ? 'bg-red-500' : 'bg-red-500 hover:bg-red-600'
+              } transition-colors`}
+            >
+              {isRecording ? (
+                <div className="w-3 h-3 bg-white rounded-sm" />
+              ) : (
+                <div className="w-3 h-3 bg-white rounded-full" />
+              )}
+            </button>
 
-            <div className="flex items-center gap-2">
+            {/* Play/Pause Button - only show when not recording and has recording */}
+            {!isRecording && currentRecording && (
               <button
-                onClick={startRecording}
-                disabled={isRecording}
-                className={`p-2 rounded-full ${isRecording ? 'bg-red-600 animate-pulse' : 'bg-red-500 hover:bg-red-600'} disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors`}
-                title={isRecording ? 'Recording...' : 'Start Recording'}
+                onClick={handlePlayPause}
+                className="w-6 h-6 rounded flex items-center justify-center bg-blue-500 hover:bg-blue-600 transition-colors"
               >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" />
-                </svg>
+                {isPlaying ? (
+                  <div className="flex gap-0.5">
+                    <div className="w-1 h-3 bg-white rounded-sm" />
+                    <div className="w-1 h-3 bg-white rounded-sm" />
+                  </div>
+                ) : hasEnded ? (
+                  <svg className="w-3 h-3" fill="white" viewBox="0 0 24 24">
+                    <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                  </svg>
+                ) : (
+                  <svg className="w-3 h-3 ml-0.5" fill="white" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                )}
               </button>
-              <button
-                onClick={() => stopRecording()}
-                disabled={!isRecording}
-                className="p-2 rounded-full bg-red-500 hover:bg-red-600 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-                title="Stop Recording"
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 6h12v12H6z" />
-                </svg>
-              </button>
-            </div>
-
-            {currentRecording && (
-              <span className="text-sm">
-                {formatTime(currentTime)} / {formatTime(currentRecording.duration)}
-              </span>
             )}
-          </div>
 
-          {currentRecording && (
-            <div className="mt-3">
-              <div
+            {/* Progress Bar */}
+            <div className="flex-1 flex items-center gap-3">
+              <div 
                 onClick={handleSeek}
-                className="w-full h-2 bg-gray-500 rounded-full cursor-pointer relative"
+                className={`flex-1 h-1 cursor-pointer rounded relative overflow-hidden ${
+                  isRecording ? 'bg-red-900' : 'bg-gray-600'
+                }`}
               >
-                <div
-                  className="h-full bg-blue-500 rounded-full transition-all duration-100"
-                  style={{ width: `${(currentTime / currentRecording.duration) * 100}%` }}
-                >
-                  <div className="absolute -right-2 -top-1.5 w-4 h-4 bg-blue-500 rounded-full border-2 border-white" />
-                </div>
+                <div 
+                  className={`h-full transition-all duration-100 ${
+                    isRecording ? 'bg-red-500' : 'bg-blue-500'
+                  }`}
+                  style={{
+                    width: !isRecording && currentRecording
+                      ? `${Math.min((currentTime / currentRecording.duration) * 100, 100)}%`
+                      : '0%'
+                  }}
+                />
+                {/* Progress thumb - show when has recording and not recording */}
+                {!isRecording && currentRecording && (
+                  <div 
+                    className="absolute top-1/2 w-3 h-3 bg-blue-500 rounded-full transform -translate-y-1/2 -translate-x-1/2 border border-white"
+                    style={{
+                      left: `${Math.min((currentTime / currentRecording.duration) * 100, 100)}%`
+                    }}
+                  />
+                )}
               </div>
+
+              {/* Timer */}
+              {isRecording ? (
+                <span className="text-red-500 text-sm font-mono">
+                  {formatTime(recordingTime)}
+                </span>
+              ) : currentRecording && (isPlaying || currentTime > 0) && (
+                <span className="text-blue-400 text-sm font-mono">
+                  {formatTime(currentTime)}
+                </span>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
-      <div className="mt-6">
-        <h2 className="text-xl font-semibold mb-4">Saved Recordings ({recordings.length})</h2>
-        {recordings.length === 0 ? (
-          <p className="text-gray-400">No recordings yet. Start recording to create your first session!</p>
-        ) : (
-          <div className="grid gap-4">
+      {/* Recording List - minimal */}
+      {recordings.length > 0 && (
+        <div className="mt-4">
+          <select
+            value={currentRecording?.id || ''}
+            onChange={(e) => {
+              const recording = recordings.find(r => r.id === e.target.value);
+              if (recording) loadRecording(recording);
+            }}
+            className="bg-gray-800 border border-gray-600 text-white rounded px-3 py-2 text-sm"
+          >
+            <option value="">Select recording...</option>
             {recordings.map((recording) => (
-              <div
-                key={recording.id}
-                className={`p-4 rounded-lg border ${currentRecording?.id === recording.id ? 'bg-blue-900/30 border-blue-500' : 'bg-gray-800 border-gray-600'}`}
-              >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="font-medium">{recording.name}</h3>
-                    <p className="text-sm text-gray-400">
-                      Duration: {formatTime(recording.duration)} |
-                      Snapshots: {recording.snapshots.length} |
-                      Created: {new Date(recording.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => loadRecording(recording)}
-                      className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors"
-                    >
-                      Load
-                    </button>
-                    <button
-                      onClick={() => deleteRecording(recording.id)}
-                      className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <option key={recording.id} value={recording.id}>
+                {recording.name} ({formatTime(recording.duration)})
+              </option>
             ))}
-          </div>
-        )}
-      </div>
+          </select>
+          {currentRecording && (
+            <button 
+              onClick={() => deleteRecording(currentRecording.id)}
+              className="ml-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      )}
+
     </div>
   );
 };
