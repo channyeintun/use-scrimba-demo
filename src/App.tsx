@@ -29,7 +29,6 @@ const BasicExample: React.FC = () => {
     stopRecording,
     play,
     pause,
-    stop,
     seekTo,
     loadRecording,
     deleteRecording,
@@ -114,8 +113,13 @@ const BasicExample: React.FC = () => {
             {/* Record Button */}
             <button
               onClick={isRecording ? () => stopRecording() : startRecording}
+              disabled={isPlaying}
               className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                isRecording ? 'bg-red-500' : 'bg-red-500 hover:bg-red-600'
+                isPlaying 
+                  ? 'bg-gray-600 cursor-not-allowed' 
+                  : isRecording 
+                  ? 'bg-red-500' 
+                  : 'bg-red-500 hover:bg-red-600'
               } transition-colors`}
             >
               {isRecording ? (
@@ -150,32 +154,25 @@ const BasicExample: React.FC = () => {
 
             {/* Progress Bar */}
             <div className="flex-1 flex items-center gap-3">
-              <div 
-                onClick={handleSeek}
-                className={`flex-1 h-1 cursor-pointer rounded relative overflow-hidden ${
-                  isRecording ? 'bg-red-900' : 'bg-gray-600'
-                }`}
-              >
+              {currentRecording && (
                 <div 
-                  className={`h-full transition-all duration-100 ${
-                    isRecording ? 'bg-red-500' : 'bg-blue-500'
-                  }`}
-                  style={{
-                    width: !isRecording && currentRecording
-                      ? `${Math.min((currentTime / currentRecording.duration) * 100, 100)}%`
-                      : '0%'
-                  }}
-                />
-                {/* Progress thumb - show when has recording and not recording */}
-                {!isRecording && currentRecording && (
+                  onClick={handleSeek}
+                  className="flex-1 h-1 bg-gray-600 cursor-pointer rounded relative overflow-hidden"
+                >
+                  <div 
+                    className="h-full bg-blue-500"
+                    style={{
+                      width: `${Math.min((currentTime / currentRecording.duration) * 100, 100)}%`
+                    }}
+                  />
                   <div 
                     className="absolute top-1/2 w-3 h-3 bg-blue-500 rounded-full transform -translate-y-1/2 -translate-x-1/2 border border-white"
                     style={{
                       left: `${Math.min((currentTime / currentRecording.duration) * 100, 100)}%`
                     }}
                   />
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Timer */}
               {isRecording ? (
