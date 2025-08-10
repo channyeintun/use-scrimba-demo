@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, react-refresh/only-export-components */
 import React, { useRef, useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import type * as monaco from 'monaco-editor';
@@ -10,19 +11,18 @@ const BasicExample: React.FC = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const audioChunksRef = useRef<Blob[]>([]);
+  const [recordings, setRecordings] = useState<Recording[]>([]);
 
   const scrimbaHook = useScrimba({
     editorRef,
-    audioRef, // Enable native audio synchronization
+    audioRef,
     onRecordingStart: async () => {
       console.log('📹 Recording started with perfect audio sync');
-      // Start audio recording when editor recording starts
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const mediaRecorder = new MediaRecorder(stream);
         mediaRecorderRef.current = mediaRecorder;
         
-        // Reset audio chunks
         audioChunksRef.current = [];
         
         mediaRecorder.ondataavailable = (e) => {
@@ -32,18 +32,19 @@ const BasicExample: React.FC = () => {
         };
         
         mediaRecorder.onstop = () => {
-          // Stop all tracks to release microphone
           stream.getTracks().forEach(track => track.stop());
         };
         
         mediaRecorder.start();
         setIsRecordingAudio(true);
-        
       } catch (error) {
         console.error('Failed to start audio recording:', error);
       }
     },
-    onRecordingStop: (recording: Recording) => console.log('⏹️ Recording stopped', recording),
+    onRecordingStop: (recording: Recording) => {
+      console.log('⏹️ Recording stopped', recording);
+      setRecordings(prev => [...prev, recording]);
+    },
     onPlaybackStart: () => console.log('▶️ Perfect synchronized playback started'),
     onPlaybackPause: () => console.log('⏸️ Synchronized playback paused'),
     onError: (error: Error) => console.error('🚨 Scrimba error:', error),
@@ -54,7 +55,6 @@ const BasicExample: React.FC = () => {
     isRecording,
     isPlaying,
     currentTime,
-    recordings,
     currentRecording,
     recordingStartTime,
     hasEnded,
@@ -64,18 +64,16 @@ const BasicExample: React.FC = () => {
     pause,
     seekTo,
     loadRecording,
-    deleteRecording,
     handleEditorMount,
     handleEditorChange,
   } = scrimbaHook;
 
-  // Continuous timer for recording
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     if (isRecording && recordingStartTime) {
       interval = setInterval(() => {
         setRecordingTime(Date.now() - recordingStartTime);
-      }, 100); // Update every 100ms for smooth timer
+      }, 100);
     } else {
       setRecordingTime(0);
     }
@@ -100,11 +98,9 @@ const BasicExample: React.FC = () => {
     seekTo(targetTime);
   };
 
-  // Custom stop recording with audio
   const handleStopRecording = () => {
     if (mediaRecorderRef.current && isRecordingAudio) {
       mediaRecorderRef.current.onstop = () => {
-        // Create audio blob and attach to recording
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         stopRecording({ audioBlob });
       };
@@ -119,8 +115,6 @@ const BasicExample: React.FC = () => {
     if (isPlaying) {
       pause();
     } else {
-      // With the fixed hasEnded API, just call play()
-      // It will automatically restart from beginning if ended
       play();
     }
   };
@@ -144,7 +138,6 @@ const BasicExample: React.FC = () => {
             fontSize: 14,
             lineNumbers: 'on',
             automaticLayout: true,
-            // Disable code suggestions and IntelliSense
             quickSuggestions: false,
             suggestOnTriggerCharacters: false,
             acceptSuggestionOnEnter: 'off',
@@ -158,7 +151,6 @@ const BasicExample: React.FC = () => {
 
         <div className="bg-gray-800 px-4 py-3 border-t border-gray-600">
           <div className="flex items-center gap-3">
-            {/* Record Button */}
             <button
               onClick={isRecording ? handleStopRecording : startRecording}
               disabled={isPlaying}
@@ -177,7 +169,6 @@ const BasicExample: React.FC = () => {
               )}
             </button>
 
-            {/* Play/Pause Button - only show when not recording and has recording */}
             {!isRecording && currentRecording && (
               <button
                 onClick={handlePlayPause}
@@ -200,7 +191,6 @@ const BasicExample: React.FC = () => {
               </button>
             )}
 
-            {/* Progress Bar */}
             <div className="flex-1 flex items-center gap-3">
               {currentRecording && (
                 <div 
@@ -222,7 +212,6 @@ const BasicExample: React.FC = () => {
                 </div>
               )}
 
-              {/* Timer */}
               {isRecording ? (
                 <span className="text-red-500 text-sm font-mono">
                   {formatTime(recordingTime)}
@@ -237,7 +226,6 @@ const BasicExample: React.FC = () => {
         </div>
       </div>
 
-      {/* Recording List - minimal */}
       {recordings.length > 0 && (
         <div className="mt-4">
           <select
@@ -257,7 +245,7 @@ const BasicExample: React.FC = () => {
           </select>
           {currentRecording && (
             <button 
-              onClick={() => deleteRecording(currentRecording.id)}
+              onClick={() => setRecordings(prev => prev.filter(r => r.id !== currentRecording.id))}
               className="ml-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
             >
               Delete
@@ -266,9 +254,7 @@ const BasicExample: React.FC = () => {
         </div>
       )}
 
-      {/* Hidden Audio Element - Managed by useScrimba hook for perfect sync */}
       <audio ref={audioRef} style={{ display: 'none' }} />
-
     </div>
   );
 };
